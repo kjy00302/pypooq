@@ -1,5 +1,5 @@
 """
-Python용 비공식 Pooq Client, 한국에서만 될껄?
+Python용 비공식 ~~Pooq~~ Wavve Client, 한국에서만 될껄?
 """
 import requests
 
@@ -8,93 +8,87 @@ Highquality = 2000
 Mediumquality = 1000
 Mobilequality = 500
 
+Commonquery = {
+    "apikey": "E5F3E0D30947AA5440556471321BB6D9",
+    "device": "pc",
+    "partner": "pooq",
+    "region": "kor",
+    "targetage": "auto",
+    "credential": "none",
+    "pooqzone": "none",
+    "drm": "wm"
+}
+
 
 class Pooq():
     def __init__(self):
         self.session = requests.sessions.Session()
-        self.apiaddress = 'https://wapie.pooq.co.kr'
-        self.credential = ''
+        self.apiaddress = 'https://apis.pooq.co.kr'
+        self.credential = None
+        self.guid = None
         self.islogin = 'false'
+        self.getguid()
 
-    def getlogininfo(self, id, password):
-        """
-        Pooq에서 사용자 정보를 가져온다.
-        """
-        requestquary = {
-            'deviceTypeId': 'pc',
-            'apiAccessCredential': 'EEBE901F80B3A4C4E5322D58110BE95C',
-            'marketTypeId': 'generic',
-            'credential': 'none',
-            'mode': 'id',
-            'id': id,
-            'password': password
-        }
-        logininfo = self.session.post(self.apiaddress+'/v1/login', params=requestquary)
-        if logininfo.json()['returnCode'] == '200':
-            return logininfo.json()['result']
-        else:
-            raise ConnectionError('LoginError')
+    def getguid(self):
+        request = self.session.get(self.apiaddress+'/guid/issue', params=Commonquery)
+        self.guid = request.json()['guid']
 
     def login(self, userid, password):
         """
-        Pooq에서 Credential을 가져와 Instance에 저장한다.
-        
-        userid = 사용자 ID
-        password = 사용자 비밀번호
+        Pooq에서 사용자 정보를 가져온다.
         """
-        try:
-            self.credential = self.getlogininfo(userid, password)['credential']
-            self.islogin = True
-            return True
-        except:
-            return False
-
-    def credentiallogin(self, credential):
-        """
-        사용자로부터 Credential을 가져와 Instance에 저장한다.
-        """
-        self.credential = credential
-        self.islogin = True
+        requestquery = {}
+        requestquery.update(Commonquery)
+        requestdata = {
+            "id":userid,
+            "password":password,
+            "profile":"",
+            "pushid":"none",
+            "type":"general"
+            }
+        logininfo = self.session.post(self.apiaddress+'/login', params=requestquery, data=requestdata)
+        self.credential = logininfo.json()["credential"]
         return True
 
     def logout(self):
         """
         Instance에 있는 Credential 정보를 없앤다. 이게 필요한가?
         """
+        requestquery = {}
+        requestquery.update(Commonquery)
+        requestquery['credential'] = self.credential
+        request = self.session.post(self.apiaddress+'/logout', params=requestquery,data={"pushid":""})
         self.credential = ''
         self.islogin = False
         return True
 
-    def getallchannellist(self):
+    def getallchannelbygenre(self):
         """
         모든 생방송 채널 정보를 반환한다
         """
-        prettify = True
-        requestquary = {
-            'deviceTypeId': 'pc',
-            'genere': 'all',
-            'marketTypeId': 'generic',
-            'offset': '0',
-            'orderby': 'g',
-            'apiAccessCredential': 'EEBE901F80B3A4C4E5322D58110BE95C',
-            'mode': 'all',
-            'limit': '100',
-            'credential': 'none'
-        }
-        channellist = self.session.get(self.apiaddress+'/v1/lives', params=requestquary)
-        if channellist.json()['returnCode'] == '200':
-            result = channellist.json()['result']
-            if prettify:
-                buf = {}
-                for i in result['list']:
-                    buf[i['channelTitle']] = i
-                return buf
-            else:
-                return result
-        else:
-            raise Exception('idontknowError')
+        requestquery = {}
+        requestquery.update(Commonquery)
+        requestquery['credential'] = self.credential or "None"
+        request = self.session.get(self.apiaddress+'/live/genrechannels', params=requestquery)
+        return request.json()['list']
 
-    def getchannelinfo(self, channelid, quality, credential=None):
+    def getallchannel(self):
+        """
+        모든 생방송 채널 정보를 반환한다
+        """
+        requestquery = {
+            "genre": "all",
+            "type": "all",
+            "free": "all",
+            "offset": 0,
+            "limit": 999
+            }
+        requestquery.update(Commonquery)
+        requestquery['credential'] = self.credential or "None"
+        request = self.session.get(self.apiaddress+'/live/all-channels', params=requestquery)
+        return request.json()['list']
+
+    def getchannelinfo(self, channelid):
         """
         생방송 채널 정보를 가져온다.
 
@@ -102,173 +96,155 @@ class Pooq():
         quality = 화질(pypooq.Highquality, pypooq.Mobilequality 등등)
         credential = 인증 정보, 없을 시 미리보기 주소가 반환될 수 있다
         """
-        credential = credential or self.credential
-        requestquary = {
-            'deviceTypeId': 'pc',
-            'marketTypeId': 'generic',
-            'deviceModelId': 'none',
-            'credential': credential,
-            'quality': quality
-        }
-        channelurl = self.session.get(self.apiaddress + '/v1/lives/' + channelid + '/url', params=requestquary)
-        if channelurl.json()['returnCode'] == '200':
-            return channelurl.json()['result']
-        else:
-            raise Exception('idontknowError')
+        requestquery = {}
+        requestquery.update(Commonquery)
+        requestquery['credential'] = self.credential or "None"
+        request = self.session.get(self.apiaddress+'/live/channels/'+channelid, params=requestquery)
+        return request.json()
 
-    def getchannelurl(self, channelid, quality, credential=None):
-        """
-        생방송 채널 주소를 가져온다.
-
-        channelid = 생방송 채널 번호(K01, K02 등등)
-        quality = 화질(pypooq.Highquality, pypooq.Mobilequality 등등)
-        credential = 인증 정보, 없을 시 미리보기 주소가 반환될 수 있다
-        rawdata = True일 경우 주소 외 정보를 dict형으로 반환
-        """
-        return self.getchannelinfo(channelid, quality, credential)['url']
-
-    def getchannelepg(self, channelid, starttime, endtime, limit=1000):
+    def getchannelepg(self, channelid, startdatetime, enddatetime, offset=0, limit=999, orderby="old"):
         """
         전자편성정보를 가져온다.
 
-        time 형식 = YYYY/MM/DD HH:MM
-        starttime = 시작 시간
-        endtime = 종료 시간
-        limit = 표시할 최대 개수(기본 1000)
+        time 형식 = YYYY-MM-DD+HH:MM
+        startdatetime = 시작 시간
+        enddatetime = 종료 시간
+        limit = 표시할 최대 개수(기본 999)
         """
-        requestquary = {
-            'deviceTypeId': 'pc',
-            'marketTypeId': 'generic',
-            'apiAccessCredential': 'EEBE901F80B3A4C4E5322D58110BE95C',
-            'offset': '0',
-            'limit': limit,
-            'startTime': starttime,
-            'endTime': endtime
-        }
-        epgurl = self.session.get(self.apiaddress + '/v1/epgs/' + channelid, params=requestquary)
-        if epgurl.json()['returnCode'] == '200':
-            return epgurl.json()['result']
-        else:
-            raise Exception('idontknowError')
+        requestquery = {
+            "startdatetime":startdatetime,
+            "enddatetime":enddatetime,
+            "offset":offset,
+            "limit":limit,
+            "orderby":orderby
+            }
+        requestquery.update(Commonquery)
+        requestquery['credential'] = self.credential or "None"
+        request = self.session.get(self.apiaddress+'/live/epgs/channels/'+channelid, params=requestquery)
+        return request.json()
 
-    def search(self, quary, mode, limit=1000):
+    def getgenrevodlist(self, genre, limit=50, offset=0):
+        """
+        한 장르 안에 있는 VOD를 조회한다
+
+        genre = 장르 코드
+        """
+        requestquery = {
+            "contenttype":"program",
+            "genre":genre,
+            "limit":limit,
+            "offset":offset,
+            "orderby":"new",
+            }
+        requestquery.update(Commonquery)
+        requestquery['credential'] = self.credential or "None"
+        request = self.session.get(self.apiaddress + '/cf/vod/newcontents', params=requestquery)
+        return request.json()
+
+    def search(self, keyword, type_, limit=50, offset=0, orderby='score'):
         """
         검색한다.
 
-        quary = 검색할 내용
+        keyword = 검색할 내용
         limit = 최대 결과 수
-        mode = 검색할 종류(program, live, vod, movie, clip, keyword 중 하나)
+        type_ = 검색할 종류(program, live, vod, movie, clip, keyword 중 하나)
         """
-        supportedmode = ['program', 'live', 'vod', 'movie', 'clip', 'keyword']
-        if mode == 'keyword':
-            mode = 'all/instance/'
-        if not quary in supportedmode:
-            Exception('WrongmodeError')
 
-        requestquary = {
-            'deviceTypeId': 'pc',
-            'marketTypeId': 'generic',
-            'apiAccessCredential': 'EEBE901F80B3A4C4E5322D58110BE95C',
-            'query': quary
-        }
-        if mode != 'all/instance/':
-            requestquary.update({
-                'offset': '0',
-                'limit': limit,
-                'orderby': 'C'
-                })
+        requestquery = {
+            "keyword":keyword,
+            "limit":limit,
+            "offset":offset,
+            "orderby":orderby,
+            "type":type_,
+            }
+        requestquery.update(Commonquery)
+        requestquery['credential'] = self.credential or "None"
+        searchresult = self.session.get(self.apiaddress + '/cf/search/list.js', params=requestquery)
+        return searchresult.json()
 
-        searchresult = self.session.get(self.apiaddress + '/v1/search/' + mode, params=requestquary)
-        if searchresult.json()['returnCode'] == '200':
-            return searchresult.json()['result']['list']
-        else:
-            raise Exception('idontknowError')
-
-    def getprograminfo(self, programid):
+    def getprograminfo(self, programid, limit=100, offset=0):
         """
         프로그램 정보를 가져온다.
 
         programid = 프로그램 번호
         """
-        requestquary = {
-            'deviceTypeId': 'pc',
-            'marketTypeId': 'generic',
-            'apiAccessCredential': 'EEBE901F80B3A4C4E5322D58110BE95C'
+        requestquery = {
+            'limit': limit,
+            'offset': offset,
+            'orderby': 'old'
         }
 
-        info = self.session.get(self.apiaddress + '/v1/programs/' + programid, params=requestquary)
+        requestquery.update(Commonquery)
+        info = self.session.get(self.apiaddress + '/vod/programs-contents/' + programid, params=requestquery)
 
-        if info.json()['returnCode'] == '200':
-            return info.json()['result']
-        else:
-            raise Exception('idontknowError')
+        return info.json()['list']
 
-    def getvodlist(self, programid, limit=1000, credential=None):
+    def getvodlist(self, programid, limit=1000, offset=0, orderby="new"): #new or old
         """
         프로그램 VOD 목록을 가져온다.
 
         programid = 프로그램 번호
         limit = 최대 결과 수
-        credential = 인증 정보, 없을 시 검색 불가.
         """
-        credential = credential or self.credential
+        requestquery = {"offset":offset, "limit":limit, "orderby":orderby}
+        requestquery.update(Commonquery)
+        requestquery['credential'] = self.credential or "None"
 
-        requestquary = {
-            'deviceTypeId': 'pc',
-            'marketTypeId': 'generic',
-            'apiAccessCredential': 'EEBE901F80B3A4C4E5322D58110BE95C',
-            'offset': '0',
-            'limit': limit,
-            'orderby': 'D',
-            'isFree': 'all',
-            'credential': credential,
-            'dummy': ''
-        }
+        vodlist = self.session.get(self.apiaddress + '/vod/programs-contents/' + programid, params=requestquery)
 
-        vodlist = self.session.get(self.apiaddress + '/v1/vods25/all/' + programid, params=requestquary)
+        return vodlist.json()['list']
 
-        if vodlist.json()['returnCode'] == '200':
-            return vodlist.json()['result']['list']
-        else:
-            raise Exception('idontknowError')
-
-    def getvodinfo(self, programid, episodeid, quality, credential=None):
+    def getvodinfo(self, contentid):
         """
         VOD 정보를 가져온다.
 
         programid = 프로그램 번호
-        episodeid = 프로그램 내 구분 번호
-        quality = 화질(pypooq.Highquality, pypooq.Mobilequality 등등)
-        credential = 인증 정보, 없을 시 미리보기 주소가 반환될 수 있다
         """
-        credential = credential or self.credential
-        
-        requestquary = {
-            'deviceTypeId': 'pc',
-            'marketTypeId': 'generic',
-            'deviceModelId': '',
-            'guid': '00000000000000',
-            'credential': credential,
-            'quality': quality,
-            'type': 'vod',
-            'cornerId': '1',
-            'id': episodeid,
-            'action': 'stream'
-        }
-        
-        vodurl = self.session.get(self.apiaddress + '/v1/permission25/', params=requestquary)
-        if vodurl.json()['returnCode'] == '200':
-            return vodurl.json()['result']
-        else:
-            raise Exception('idontknowError')
+        requestquery = {}
+        requestquery.update(Commonquery)
+        requestquery['credential'] = self.credential or "None"
 
-    def getvodurl(self, programid, episodeid, quality, credential=None):
+        vodinfo = self.session.get(self.apiaddress + '/vod/contents/'+contentid, params=requestquery)
+        return vodinfo.json()
+
+    def getstream(self, action, contentid, quality, contenttype, authtype, isabr=False, ishevc=False):
+        """
+        스트림 주소를 가져온다.
+
+        action = "hls", "download" 둘 중 하나
+        contentid = 컨텐츠 번호
+        quality = 화질(480p, 720p, 1080p 등등)
+        contenttype = "vod", "live" 둘 중 하나
+        authtype = "cookie", "token" 둘 중 하나
+
+        authtype이 cookie이고 playurl 사용 시 awscookie를 같이 사용할것
+        """
+        requestquery = {
+            "contentid":contentid,
+            "contenttype":contenttype,
+            "action":"hls",
+            "quality":quality,
+            "deviceModelId":"none",
+            "guid":self.guid,
+            "lastplayid":"none",
+            "authtype":authtype,
+            "isabr":"y" if isabr else 'n',
+            "ishevc":"y" if ishevc else 'n'
+            }
+        requestquery.update(Commonquery)
+        requestquery['credential'] = self.credential or "None"
+
+        vodstreaminfo = self.session.get(self.apiaddress + '/streaming', params=requestquery)
+        return vodstreaminfo.json()
+
+    def getvodstream(self, contentid, quality, authtype="token"):
         """
         VOD 주소를 가져온다.
 
-        programid = 프로그램 번호
-        episodeid = 프로그램 내 구분 번호
-        quality = 화질(pypooq.Highquality, pypooq.Mobilequality 등등)
-        credential = 인증 정보, 없을 시 미리보기 주소가 반환될 수 있다
+        contentid = 컨텐츠 번호
         """
-        return self.getvodinfo(programid, episodeid, quality, credential)['url']
+
+        return self.getstream('hls', contentid, quality, 'vod', authtype)
+
+    def getlivestream(self, contentid, quality, authtype="token"):
+        return self.getstream('hls', contentid, quality, 'live', authtype)
